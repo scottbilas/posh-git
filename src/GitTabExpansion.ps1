@@ -92,7 +92,12 @@ function script:gitCommands($filter, $includeAliases) {
         $cmdList += $someCommands -like "$filter*"
     }
     else {
-        $cmdList += git help --all |
+        # support for github's `hub` cli
+        $git = 'git'
+        if (Get-Command 'hub' -ErrorAction SilentlyContinue) {
+            $git = 'hub'
+        }
+        $cmdList += & $git help --all |
             Where-Object { $_ -match '^  \S.*' } |
             ForEach-Object { $_.Split(' ', [StringSplitOptions]::RemoveEmptyEntries) } |
             Where-Object { $_ -like "$filter*" }
@@ -262,8 +267,9 @@ function Expand-GitCommand($Command) {
 
 function GitTabExpansionInternal($lastBlock, $GitStatus = $null) {
     $ignoreGitParams = '(?<params>\s+-(?:[aA-zZ0-9]+|-[aA-zZ0-9][aA-zZ0-9-]*)(?:=\S+)?)*'
+    $gitAliasPattern = "($(Get-AliasPattern git)|$(Get-AliasPattern hub))"
 
-    if ($lastBlock -match "^$(Get-AliasPattern git) (?<cmd>\S+)(?<args> .*)$") {
+    if ($lastBlock -match "^$gitAliasPattern (?<cmd>\S+)(?<args> .*)$") {
         $lastBlock = expandGitAlias $Matches['cmd'] $Matches['args']
     }
 
@@ -278,7 +284,7 @@ function GitTabExpansionInternal($lastBlock, $GitStatus = $null) {
         return gitBranches $matches['ref'] $true
     }
 
-    switch -regex ($lastBlock -replace "^$(Get-AliasPattern git) ","") {
+    switch -regex ($lastBlock -replace "^$gitAliasPattern ","") {
 
         # Handles git <cmd> <op>
         "^(?<cmd>$($subcommands.Keys -join '|'))\s+(?<op>\S*)$" {
@@ -469,6 +475,7 @@ function TabExpansion($line, $lastWord) {
         "^$(Get-AliasPattern git) (.*)" { Expand-GitCommand $lastBlock }
         "^$(Get-AliasPattern tgit) (.*)" { Expand-GitCommand $lastBlock }
         "^$(Get-AliasPattern gitk) (.*)" { Expand-GitCommand $lastBlock }
+        "^$(Get-AliasPattern hub) (.*)" { Expand-GitCommand $lastBlock }
 
         # Fall back on existing tab expansion
         default {
